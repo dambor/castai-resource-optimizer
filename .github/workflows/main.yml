@@ -1,0 +1,161 @@
+name: Resource Optimization
+
+on:
+  # Run weekly on Monday at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * 1'
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      workload:
+        description: 'Specific workload to update (leave empty for all)'
+        required: false
+      namespace:
+        description: 'Namespace for workload(s)'
+        required: false
+        default: 'default'
+      dry_run:
+        description: 'Dry run (no changes applied)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  optimize-resources:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for proper branch handling
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl jq git
+      
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/stable.txt"
+          curl -LO "https://dl.k8s.io/$(cat stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+      
+      - name: Install GitHub CLI
+        run: |
+          type -p curl >/dev/null || sudo apt install curl -y
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+      
+      - name: Make scripts executable
+        run: |
+          chmod +x workload-recommendation-parser.py
+          chmod +x update_workload.sh
+      
+      - name: Set Git identity
+        run: |
+          git config --global user.name "CAST.AI Resource Optimizer"
+          git config --global user.email "castai-optimizer@github.actions"
+      
+      - name: Authenticate with GitHub
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" > .githubtoken
+          gh auth login --with-token < .githubtoken
+          rm .githubtoken
+      
+      - name: Run single workload update (if specified)
+        if: ${{ github.event.inputs.workload != '' }}
+        run: |
+          DRY_RUN_FLAG=""
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          
+          echo "Optimizing workload ${{ github.event.inputs.workload }} in namespace ${{ github.event.inputs.namespace }}"
+          ./update_workload.sh \
+            --cluster-id ${{ secrets.CAST_CLUSTER_ID }} \
+            --api-key ${{ secrets.CAST_API_KEY }} \
+            --workload "${{ github.event.inputs.workload }}" \
+            --namespace "${{ github.event.inputs.namespace }}" \
+            --repo-path . \
+            --manifest-path "kubernetes/${{ github.event.inputs.workload }}.yaml" \
+            $DRY_RUN_FLAG
+      
+      - name: Run optimization for all workloads
+        if: ${{ github.event.inputs.workload == '' }}
+        run: |
+          # Define the list of workloads to optimize
+          # You can customize this list based on your deployments
+          WORKLOADS=(
+            "frontend"
+            "backend"
+            "cartservice"
+            "checkoutservice"
+            "currencyservice"
+            "emailservice"
+            "paymentservice"
+            "productcatalogservice"
+            "recommendationservice"
+            "shippingservice"
+          )
+          
+          NAMESPACE="${{ github.event.inputs.namespace || 'default' }}"
+          
+          DRY_RUN_FLAG=""
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          
+          # Process each workload
+          for workload in "${WORKLOADS[@]}"; do
+            echo "========================================="
+            echo "Optimizing $workload in namespace $NAMESPACE"
+            echo "========================================="
+            
+            MANIFEST_PATH="kubernetes/$workload.yaml"
+            
+            # Skip if manifest doesn't exist
+            if [ ! -f "$MANIFEST_PATH" ]; then
+              echo "Manifest file not found: $MANIFEST_PATH - skipping"
+              continue
+            fi
+            
+            # Run the update script
+            ./update_workload.sh \
+              --cluster-id ${{ secrets.CAST_CLUSTER_ID }} \
+              --api-key ${{ secrets.CAST_API_KEY }} \
+              --workload "$workload" \
+              --namespace "$NAMESPACE" \
+              --repo-path . \
+              --manifest-path "$MANIFEST_PATH" \
+              $DRY_RUN_FLAG || echo "Failed to optimize $workload - continuing with next"
+            
+            # Add a small delay between API calls to avoid rate limiting
+            sleep 2
+          done
+      
+      - name: Generate summary report
+        run: |
+          echo "# Resource Optimization Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Run completed at: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            echo "**Dry run mode** - no changes were applied" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Pull Requests Created" >> $GITHUB_STEP_SUMMARY
+          
+          # List recent PRs created by this workflow
+          echo "Recent PRs created by the optimizer:" >> $GITHUB_STEP_SUMMARY
+          gh pr list --author "CAST.AI Resource Optimizer" --limit 10 --json number,title,url --jq '.[] | "- [#\(.number) \(.title)](\(.url))"' >> $GITHUB_STEP_SUMMARY || echo "Unable to fetch PR information" >> $GITHUB_STEP_SUMMARY
