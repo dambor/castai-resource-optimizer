@@ -63,8 +63,8 @@ spec:
             cpu: 200m
             memory: 128Mi
           requests:
-            cpu: "0.376"
-            memory: 40Mi
+            cpu: 393m
+            memory: 47Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
