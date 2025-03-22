@@ -182,10 +182,3 @@ Check that the path provided with `--repo-path` is correct.
 **Error: kubectl not found:**
 Install kubectl or provide the full path to the binary.
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.

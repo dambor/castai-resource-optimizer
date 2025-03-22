@@ -109,7 +109,7 @@ if [ ! -z "$CONTAINER" ]; then
   CONTAINER_PARAM="--container $CONTAINER"
 fi
 
-# Generate the patch - using updated parameter format
+# Generate the patch
 "$PARSER_SCRIPT" \
   --cluster-id "$CLUSTER_ID" \
   --api-key "$API_KEY" \
@@ -149,6 +149,9 @@ if [ ! -d "$REPO_PATH" ]; then
   exit 1
 fi
 
+# Store the current directory to return to later
+CURRENT_DIR=$(pwd)
+
 # Full path to the manifest file
 FULL_MANIFEST_PATH="$REPO_PATH/$MANIFEST_PATH"
 if [ ! -f "$FULL_MANIFEST_PATH" ]; then
@@ -183,7 +186,17 @@ fi
 
 # Apply the patch using kubectl
 TMP_FILE=$(mktemp)
-PATCH_PATH=$(realpath "../$OUTPUT_FILE")
+
+# Get the absolute path to the patch file
+if [ "$REPO_PATH" = "./" ] || [ "$REPO_PATH" = "." ]; then
+  # If repo path is current directory, use the path relative to current dir
+  PATCH_PATH="$CURRENT_DIR/$OUTPUT_FILE"
+else
+  # If repo path is somewhere else, use the path relative to repo dir
+  PATCH_PATH="$CURRENT_DIR/$OUTPUT_FILE"
+fi
+
+echo "Using patch file: $PATCH_PATH"
 kubectl patch --local -f "$MANIFEST_PATH" --patch-file "$PATCH_PATH" -o yaml > "$TMP_FILE"
 mv "$TMP_FILE" "$MANIFEST_PATH"
 
@@ -220,5 +233,8 @@ fi
 
 # Return to original branch
 git checkout "$CURRENT_BRANCH"
+
+# Return to the original directory
+cd "$CURRENT_DIR"
 
 echo "Process completed successfully!"
