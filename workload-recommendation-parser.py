@@ -37,6 +37,20 @@ def find_workload(workloads_data, name, namespace="default"):
             
     return None
 
+def format_cpu_value(cpu_cores):
+    """Format CPU value in Kubernetes format (cores or millicores)."""
+    if cpu_cores is None:
+        return None
+        
+    # Convert float to string based on value
+    if cpu_cores >= 1.0:
+        # For values >= 1, use the decimal format (e.g., "2")
+        return str(cpu_cores)
+    else:
+        # For fractional values, convert to millicores (e.g., "100m")
+        millicores = int(cpu_cores * 1000)
+        return f"{millicores}m"
+
 def create_kubernetes_patch(workload, container_name=None):
     """Create a Kubernetes patch for updating the deployment based on workload recommendations."""
     if not workload:
@@ -90,7 +104,7 @@ def create_kubernetes_patch(workload, container_name=None):
             
             # Add CPU requests if recommended
             if "cpuCores" in requests:
-                container_patch["resources"]["requests"]["cpu"] = str(requests["cpuCores"])
+                container_patch["resources"]["requests"]["cpu"] = format_cpu_value(requests["cpuCores"])
                 
             # Add memory requests if recommended (convert GiB to Mi)
             if "memoryGib" in requests:
@@ -104,7 +118,7 @@ def create_kubernetes_patch(workload, container_name=None):
             
             # Add CPU limits if recommended
             if "cpuCores" in limits:
-                container_patch["resources"]["limits"]["cpu"] = str(limits["cpuCores"])
+                container_patch["resources"]["limits"]["cpu"] = format_cpu_value(limits["cpuCores"])
                 
             # Add memory limits if recommended (convert GiB to Mi)
             if "memoryGib" in limits:
