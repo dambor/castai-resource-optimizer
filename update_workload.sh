@@ -210,6 +210,22 @@ echo "Committing changes: $COMMIT_MESSAGE"
 git add "$MANIFEST_PATH"
 git commit -m "$COMMIT_MESSAGE"
 
+# Configure git to use the token for authentication
+# This is crucial for GitHub Actions
+if [ ! -z "${GITHUB_TOKEN}" ]; then
+  # Get the repository name from remote URL or environment variable
+  if [ ! -z "${GITHUB_REPOSITORY}" ]; then
+    REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+  else
+    GITHUB_REPOSITORY=$(git remote get-url origin | sed -e 's/.*github.com[:\/]\(.*\)\.git/\1/')
+    REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+  fi
+  
+  # Set the authenticated remote URL
+  git remote set-url origin "${REPO_URL}"
+  echo "Configured Git with token authentication"
+fi
+
 # Push the branch
 echo "Pushing branch $BRANCH_NAME to origin"
 git push -u origin "$BRANCH_NAME"
@@ -218,6 +234,9 @@ git push -u origin "$BRANCH_NAME"
 if command -v gh &> /dev/null; then
   echo "Creating pull request..."
   PR_TITLE="${COMMIT_MESSAGE_PREFIX} ${WORKLOAD}"
+  
+  # If GITHUB_TOKEN is set, we don't need to do extra auth for gh CLI
+  # gh CLI will use the token automatically
   
   gh pr create \
     --title "$PR_TITLE" \

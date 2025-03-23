@@ -39,7 +39,7 @@ Automatically optimize your Kubernetes resource configurations based on CAST.AI 
 If you want to just generate a patch file without applying any changes:
 
 ```bash
-./workload-recommendation-parser.py \
+python workload-recommendation-parser.py \
   --cluster-id YOUR_CLUSTER_ID \
   --api-key YOUR_API_KEY \
   --name YOUR_WORKLOAD_NAME \
@@ -126,36 +126,36 @@ You can integrate these scripts with CI/CD pipelines to periodically create PRs 
 
 ### Example GitHub Actions Workflow
 
+Create a file at `.github/workflows/resource-optimization.yml` with the following content:
+
 ```yaml
 name: Resource Optimization
 
 on:
   schedule:
-    - cron: '0 0 * * 0'  # Run weekly on Sunday at midnight
+    - cron: '0 2 * * 1'  # Run weekly on Monday at 2 AM UTC
   workflow_dispatch:     # Allow manual triggers
+    inputs:
+      workload:
+        description: 'Specific workload to update'
+        required: false
+
+# Important: Give the workflow permission to create PRs and push to the repository
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   optimize-resources:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Install kubectl
+      - name: Install dependencies
         run: |
-          curl -LO "https://dl.k8s.io/release/stable.txt"
-          curl -LO "https://dl.k8s.io/$(cat stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
-          
-      - name: Install GitHub CLI
-        run: |
-          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-          sudo apt update
-          sudo apt install gh
-          
-      - name: Update resources
+          sudo apt-get install -y curl kubectl
+      - name: Run optimizer
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./update_workload.sh \
             --cluster-id ${{ secrets.CAST_CLUSTER_ID }} \
@@ -165,20 +165,52 @@ jobs:
             --manifest-path kubernetes/frontend.yaml
 ```
 
-## Security Considerations
+Make sure you add the required secrets to your GitHub repository.
 
-- Store your CAST.AI API key securely (in environment variables or CI/CD secrets)
-- Consider setting resource limits to prevent unconstrained scaling
-- Review all PRs before merging to validate recommendations
+## GitHub Actions Authentication
 
-## Troubleshooting
+For GitHub Actions to properly push changes and create PRs, you need to:
 
-**Error: Parser script not found:**
-Make sure the `workload-recommendation-parser.py` script is in your current directory.
+1. Add the CAST.AI credentials as repository secrets:
+   - `CAST_CLUSTER_ID`
+   - `CAST_API_KEY`
 
-**Error: Repository directory does not exist:**
-Check that the path provided with `--repo-path` is correct.
+2. Configure appropriate permissions in the workflow file:
+   ```yaml
+   permissions:
+     contents: write
+     pull-requests: write
+   ```
 
-**Error: kubectl not found:**
-Install kubectl or provide the full path to the binary.
+3. Pass the `GITHUB_TOKEN` to your script:
+   ```yaml
+   env:
+     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+   ```
 
+The script uses this token to authenticate Git operations.
+
+## Integrating with ArgoCD
+
+ArgoCD is a GitOps continuous delivery tool for Kubernetes. Here's how to integrate the CAST.AI Resource Optimizer with ArgoCD:
+
+### GitOps Integration Flow
+
+1. **Scheduled Optimization**: Set up a scheduled job to run the resource optimizer
+2. **PR-Based Changes**: The optimizer creates PRs with updated resource settings
+3. **Team Review**: Your team reviews and approves the PRs
+4. **ArgoCD Sync**: Once merged, ArgoCD automatically detects and applies the changes
+
+### Step-by-Step Implementation
+
+#### 1. Configure your ArgoCD application
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: my-microservices
+  namespace: argocd
+spec:
+  project: default
+  source:
