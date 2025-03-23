@@ -21,6 +21,11 @@ on:
         type: boolean
         default: false
 
+# Important: Give the workflow permission to create PRs and push to the repository
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   optimize-resources:
     runs-on: ubuntu-latest
@@ -65,14 +70,10 @@ jobs:
           git config --global user.name "CAST.AI Resource Optimizer"
           git config --global user.email "castai-optimizer@github.actions"
       
-      - name: Authenticate with GitHub
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" > .githubtoken
-          gh auth login --with-token < .githubtoken
-          rm .githubtoken
-      
       - name: Run single workload update (if specified)
         if: ${{ github.event.inputs.workload != '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           DRY_RUN_FLAG=""
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
@@ -91,6 +92,8 @@ jobs:
       
       - name: Run optimization for all workloads
         if: ${{ github.event.inputs.workload == '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Define the list of workloads to optimize
           # You can customize this list based on your deployments
