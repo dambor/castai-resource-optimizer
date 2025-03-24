@@ -62,18 +62,3 @@ spec:
           limits:
             memory: 128Mi
           requests:
-            cpu: 217m
-            memory: 40Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-          privileged: false
-          readOnlyRootFilesystem: true
-      securityContext:
-        fsGroup: 1000
-        runAsGroup: 1000
-        runAsNonRoot: true
-        runAsUser: 1000
-      serviceAccountName: frontend
