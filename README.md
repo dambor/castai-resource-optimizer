@@ -190,27 +190,3 @@ For GitHub Actions to properly push changes and create PRs, you need to:
 
 The script uses this token to authenticate Git operations.
 
-## Integrating with ArgoCD
-
-ArgoCD is a GitOps continuous delivery tool for Kubernetes. Here's how to integrate the CAST.AI Resource Optimizer with ArgoCD:
-
-### GitOps Integration Flow
-
-1. **Scheduled Optimization**: Set up a scheduled job to run the resource optimizer
-2. **PR-Based Changes**: The optimizer creates PRs with updated resource settings
-3. **Team Review**: Your team reviews and approves the PRs
-4. **ArgoCD Sync**: Once merged, ArgoCD automatically detects and applies the changes
-
-### Step-by-Step Implementation
-
-#### 1. Configure your ArgoCD application
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: my-microservices
-  namespace: argocd
-spec:
-  project: default
-  source:
